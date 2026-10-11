@@ -88,7 +88,8 @@ fun HomeScreen(
     latest: SleepSession?,
     weeklyAvgMinutes: Long,
     streakDays: Int,
-    onStart: () -> Unit,
+    onStartSleep: () -> Unit,
+    onStartNap: () -> Unit,
     onOpenSettings: () -> Unit,
     onPickTab: (NoxTab) -> Unit
 ) {
@@ -100,14 +101,14 @@ fun HomeScreen(
     val notifPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
-    val startWithPermission: () -> Unit = {
+    val startWithPermission: (() -> Unit) -> Unit = { action ->
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        onStart()
+        action()
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -135,40 +136,71 @@ fun HomeScreen(
             if (latest != null && latest.endAt != null) {
                 val m = metricsOf(latest.startAt, latest.endAt, latest.awakeMillis, settings.goalMinutes)
                 val (h, mm, _) = hmParts(m.sleepMinutes)
-                NoxCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Label("昨夜睡眠")
-                            Spacer(Modifier.height(6.dp))
-                            BigDuration(h, mm)
-                            Spacer(Modifier.height(3.dp))
-                            Text(
-                                "${clock(latest.startAt)} 上床 · ${clock(latest.endAt)} 醒来",
-                                fontSize = 11.5.sp,
-                                color = NoxColor.Ink2
+                if (latest.isNap) {
+                    // 最新一条是小憩：换文案、不拿 8h 目标去比 —— 它同样已计入当日汇总
+                    NoxCard {
+                        Label("最近小憩")
+                        Spacer(Modifier.height(6.dp))
+                        BigDuration(h, mm)
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            "${clock(latest.startAt)} → ${clock(latest.endAt)} · 已计入当日汇总",
+                            fontSize = 11.5.sp,
+                            color = NoxColor.Ink2
+                        )
+                    }
+                } else {
+                    NoxCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Label("昨夜睡眠")
+                                Spacer(Modifier.height(6.dp))
+                                BigDuration(h, mm)
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    "${clock(latest.startAt)} 上床 · ${clock(latest.endAt)} 醒来",
+                                    fontSize = 11.5.sp,
+                                    color = NoxColor.Ink2
+                                )
+                            }
+                            RingProgress(
+                                percent = m.goalPercent,
+                                size = 76.dp,
+                                stroke = 6.dp,
+                                centerTitle = "${m.goalPercent}%",
+                                centerSub = "达成"
                             )
                         }
-                        RingProgress(
-                            percent = m.goalPercent,
-                            size = 76.dp,
-                            stroke = 6.dp,
-                            centerTitle = "${m.goalPercent}%",
-                            centerSub = "达成"
-                        )
                     }
                 }
             } else {
                 NoxCard {
                     Label("还没有记录")
                     Spacer(Modifier.height(8.dp))
-                    MutedText("睡前点一下「开始入睡」，醒来点一下「我醒了」。")
+                    MutedText("睡前点「进入睡眠」，打盹点「小憩」，醒来点「我醒了」。")
                 }
             }
 
             Spacer(Modifier.weight(1f))
 
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                StartSleepButton(startWithPermission)
+            Column(
+                Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NapButton { startWithPermission(onStartNap) }
+                    StartSleepButton { startWithPermission(onStartSleep) }
+                }
+                Spacer(Modifier.height(10.dp))
+                MutedText(
+                    "小憩与睡眠同样计入当日汇总",
+                    size = 10.5.sp,
+                    align = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             Spacer(Modifier.weight(1f))
@@ -256,11 +288,57 @@ private fun StartSleepButton(onClick: () -> Unit) {
                 Crescent(size = 42.dp)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "开始入睡",
+                    "进入睡眠",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFFE7E3FF),
                     letterSpacing = 0.14.sp
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 小憩入口：更小、暖色、无脉冲 —— 与主按钮「进入睡眠」形成主次对比。
+ * 数据上与小憩段完全等价（同样计入当日汇总），只是标记与文案不同。
+ */
+@Composable
+private fun NapButton(onClick: () -> Unit) {
+    Box(Modifier.size(118.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(112.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            NoxColor.Amber.copy(alpha = 0.30f),
+                            NoxColor.Amber.copy(alpha = 0.05f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .border(1.dp, NoxColor.Amber.copy(alpha = 0.34f), CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Crescent(
+                    size = 30.dp,
+                    brush = Brush.linearGradient(listOf(Color(0xFFFFD9A6), Color(0xFFE8A25C)))
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    "小憩",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFF5D9B0),
+                    letterSpacing = 0.12.sp
                 )
             }
         }
@@ -275,6 +353,7 @@ fun SleepingScreen(
     startAt: Long,
     elapsedMillis: Long,
     awakeMinutes: Long,
+    nap: Boolean = false,
     onWakeUp: () -> Unit,
     onDiscard: () -> Unit
 ) {
@@ -312,11 +391,24 @@ fun SleepingScreen(
             Box(
                 Modifier
                     .clip(CircleShape)
-                    .background(NoxColor.Violet.copy(alpha = 0.10f))
-                    .border(1.dp, NoxColor.VioletLt.copy(alpha = 0.28f), CircleShape)
+                    .background(
+                        if (nap) NoxColor.Amber.copy(alpha = 0.10f)
+                        else NoxColor.Violet.copy(alpha = 0.10f)
+                    )
+                    .border(
+                        1.dp,
+                        if (nap) NoxColor.Amber.copy(alpha = 0.30f)
+                        else NoxColor.VioletLt.copy(alpha = 0.28f),
+                        CircleShape
+                    )
                     .padding(horizontal = 14.dp, vertical = 6.dp)
             ) {
-                Text("睡眠中 · 勿扰已开启", fontSize = 11.sp, color = Color(0xFFB9C0E4), letterSpacing = 0.05.sp)
+                Text(
+                    if (nap) "小憩中 · 勿扰已开启" else "睡眠中 · 勿扰已开启",
+                    fontSize = 11.sp,
+                    color = Color(0xFFB9C0E4),
+                    letterSpacing = 0.05.sp
+                )
             }
 
             Spacer(Modifier.weight(1f))
@@ -330,7 +422,8 @@ fun SleepingScreen(
                         .background(
                             Brush.radialGradient(
                                 listOf(
-                                    NoxColor.Violet.copy(alpha = 0.55f),
+                                    if (nap) NoxColor.Amber.copy(alpha = 0.34f)
+                                    else NoxColor.Violet.copy(alpha = 0.55f),
                                     Color.Transparent
                                 )
                             ),
@@ -351,7 +444,8 @@ fun SleepingScreen(
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "已睡眠 ${hmCn(sleptMinutes)}\n预计 ${clock(expectedWake)} 起床",
+                if (nap) "已小憩 ${hmCn(sleptMinutes)}\n建议 20–40 分钟"
+                else "已睡眠 ${hmCn(sleptMinutes)}\n预计 ${clock(expectedWake)} 起床",
                 fontSize = 12.5.sp,
                 color = NoxColor.Ink2,
                 textAlign = TextAlign.Center,
@@ -433,15 +527,18 @@ fun SummaryScreen(
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Label(dateCn(endAt))
-                    Text("早上好", fontSize = 21.sp, fontWeight = FontWeight.SemiBold, color = NoxColor.Ink)
+                    Label(dateCn(endAt) + if (session.isNap) " · 小憩" else "")
+                    Text(
+                        greetingFor(LocalDateTime.now().hour),
+                        fontSize = 21.sp, fontWeight = FontWeight.SemiBold, color = NoxColor.Ink
+                    )
                 }
                 CircleIconButton(NoxIcons.Close, "放弃", onDiscard)
             }
 
             Spacer(Modifier.height(14.dp))
 
-            Label("你昨晚睡了")
+            Label(if (session.isNap) "刚刚小憩了" else "你昨晚睡了")
             Spacer(Modifier.height(6.dp))
             BigDuration(h, mm, bigSize = 36.sp, unitSize = 16.sp)
             Spacer(Modifier.height(14.dp))
@@ -449,7 +546,7 @@ fun SummaryScreen(
             SleepSpanBar()
             Spacer(Modifier.height(11.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                SpanPin(clock(session.startAt), "上床")
+                SpanPin(clock(session.startAt), if (session.isNap) "开始" else "上床")
                 SpanPin(clock(endAt), "醒来", alignEnd = true)
             }
 
@@ -565,6 +662,7 @@ fun ConfirmScreen(
     startAt: Long,
     endAt: Long,
     awaitSeconds: Int,
+    nap: Boolean = false,
     onConfirm: () -> Unit,
     onKeepSleeping: () -> Unit
 ) {
@@ -631,7 +729,11 @@ fun ConfirmScreen(
                     Spacer(Modifier.height(13.dp))
                     Text("看起来你已经醒了", fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, color = NoxColor.Ink)
                     Spacer(Modifier.height(5.dp))
-                    MutedText("检测到你已经用了一会儿手机。要现在结束昨晚的记录吗？", size = 11.5.sp)
+                    MutedText(
+                        if (nap) "检测到你已经用了一会儿手机。要现在结束这次小憩吗？"
+                        else "检测到你已经用了一会儿手机。要现在结束昨晚的记录吗？",
+                        size = 11.5.sp
+                    )
 
                     Spacer(Modifier.height(12.dp))
                     Box(

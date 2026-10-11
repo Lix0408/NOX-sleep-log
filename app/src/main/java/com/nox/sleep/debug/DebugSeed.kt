@@ -2,6 +2,7 @@ package com.nox.sleep.debug
 
 import com.nox.sleep.core.dayKeyOf
 import com.nox.sleep.core.toEpochMillis
+import com.nox.sleep.data.SessionKind
 import com.nox.sleep.data.SleepRepository
 import com.nox.sleep.data.SleepSession
 import java.time.LocalDate
@@ -39,15 +40,24 @@ object DebugSeed {
 
             // 午睡：每 3 天一次；「两天前」再加一段傍晚小睡，凑出一个 3 段的样例日
             if (back % 3 == 0 || back == 2) {
-                insert(repo, day, 13 * 60 + 20, day, 13 * 60 + 50 + rnd.nextInt(3) * 5, wakes = 0, rnd = rnd)
+                insert(
+                    repo, day, 13 * 60 + 20, day, 13 * 60 + 50 + rnd.nextInt(3) * 5,
+                    wakes = 0, rnd = rnd, kind = SessionKind.Nap.key
+                )
             }
             if (back == 2 || back == 7 || back == 15) {
-                insert(repo, day, 20 * 60 + 40, day, 21 * 60 + 10, wakes = 0, rnd = rnd)
+                insert(
+                    repo, day, 20 * 60 + 40, day, 21 * 60 + 10,
+                    wakes = 0, rnd = rnd, kind = SessionKind.Nap.key
+                )
             }
 
             // 今天再补一段（若当前时间已过），让「今日累计」直接呈现两段相加
             if (back == 0 && System.currentTimeMillis() > millisOf(day, 14 * 60 + 5)) {
-                insert(repo, day, 13 * 60 + 30, day, 14 * 60 + 5, wakes = 0, rnd = rnd)
+                insert(
+                    repo, day, 13 * 60 + 30, day, 14 * 60 + 5,
+                    wakes = 0, rnd = rnd, kind = SessionKind.Nap.key
+                )
             }
         }
     }
@@ -62,7 +72,8 @@ object DebugSeed {
         endDay: LocalDate,
         endMinOfDay: Int,
         wakes: Int,
-        rnd: Random
+        rnd: Random,
+        kind: String = SessionKind.Sleep.key
     ) {
         val startAt = millisOf(startDay, startMinOfDay)
         val endAt = millisOf(endDay, endMinOfDay)
@@ -81,6 +92,7 @@ object DebugSeed {
                 startAt = startAt,
                 endAt = endAt,
                 dayKey = dayKeyOf(endAt),
+                kind = kind,
                 awakeMillis = awakeMillis,
                 wakeCount = segs.size,
                 confirmedBy = "sample",

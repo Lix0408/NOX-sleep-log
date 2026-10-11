@@ -302,7 +302,7 @@ private fun DayTotalsView(
         Label("今天 · ${dateCn(System.currentTimeMillis())}")
         if (today == null) {
             Spacer(Modifier.height(10.dp))
-            MutedText("今天还没有完成的睡眠记录。完成一段「开始入睡 → 我醒了」后，会并入当日累计。")
+            MutedText("今天还没有完成的睡眠记录。完成一段记录（进入睡眠或小憩）后，会并入当日累计。")
         } else {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -452,6 +452,17 @@ private fun DaySegments(segments: List<SleepSession>) {
                 color = NoxColor.Ink2,
                 modifier = Modifier.weight(1f)
             )
+            if (s.isNap) {
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(NoxColor.Amber.copy(alpha = 0.14f))
+                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                ) {
+                    Text("小憩", fontSize = 9.5.sp, color = NoxColor.Amber)
+                }
+                Spacer(Modifier.size(7.dp))
+            }
             val awakeMin = s.awakeMillis / 60_000L
             if (awakeMin > 0) {
                 Text("清醒 ${awakeMin}m", fontSize = 10.sp, color = NoxColor.Amber)
@@ -589,7 +600,7 @@ fun HistoryScreen(
                 NoxCard {
                     Label("还没有记录")
                     Spacer(Modifier.height(8.dp))
-                    MutedText("完成一次「开始入睡 → 我醒了」之后，这里会出现第一晚。")
+                    MutedText("完成一次记录（进入睡眠或小憩）之后，这里会出现第一晚。")
                 }
             } else {
                 ordered.forEach { s ->
@@ -682,7 +693,7 @@ fun DetailScreen(
         })
 
         Spacer(Modifier.height(18.dp))
-        Label(dateCn(endAt))
+        Label(dateCn(endAt) + if (session.isNap) " · 小憩" else "")
         Spacer(Modifier.height(6.dp))
         BigDuration(h, mm, bigSize = 36.sp, unitSize = 16.sp)
         Spacer(Modifier.height(18.dp))

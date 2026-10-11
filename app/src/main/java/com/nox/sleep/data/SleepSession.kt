@@ -1,6 +1,7 @@
 package com.nox.sleep.data
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Delete
@@ -17,7 +18,23 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 /**
- * 一条睡眠记录。记录归属「起床日」，即 endAt 所在那天。
+ * 记录类型：睡眠 / 小憩。
+ *
+ * 两者在数据与统计上完全等价（同样成段、同样按天汇总相加），
+ * 区分只用于界面标记、通知文案与小憩专属的结束判定参数（最短间隔缩短）。
+ */
+enum class SessionKind(val key: String, val label: String) {
+    Sleep("sleep", "睡眠"),
+    Nap("nap", "小憩");
+
+    companion object {
+        /** 容错解析：未知或空值一律回退「睡眠」（历史数据没有该字段）。 */
+        fun of(key: String?): SessionKind = entries.firstOrNull { it.key == key } ?: Sleep
+    }
+}
+
+/**
+ * 一条睡眠记录（一段）。记录归属「起床日」，即 endAt 所在那天。
  *
  * awakeSegments 存 "start,end;start,end" 形式的亮屏时间片，
  * 用于单夜详情页画清醒缺口，也用于回溯 T_end。
@@ -33,6 +50,12 @@ data class SleepSession(
      * 按天汇总（同一天多段 → 当日累计）以它为分组键。
      */
     val dayKey: String? = null,
+    /**
+     * 记录类型：sleep（睡眠）/ nap（小憩），默认 sleep（历史数据回填）。
+     * 只作标记用途 —— 统计口径完全一致，两类照常相加。
+     */
+    @ColumnInfo(defaultValue = "'sleep'")
+    val kind: String = SessionKind.Sleep.key,
     val awakeMillis: Long = 0L,
     val wakeCount: Int = 0,
     /** manual = 用户手动结束；auto = 醒来检测结束 */
@@ -47,6 +70,7 @@ data class SleepSession(
 ) {
     val isFinished: Boolean get() = endAt != null
     val isComplete: Boolean get() = integrity == 1
+    val isNap: Boolean get() = SessionKind.of(kind) == SessionKind.Nap
 
     fun segmentRanges(): List<LongRange> =
         awakeSegments.split(';')
@@ -140,7 +164,7 @@ interface SleepDao {
     suspend fun deleteSamples()
 }
 
-@Database(entities = [SleepSession::class], version = 2, exportSchema = false)
+@Database(entities = [SleepSession::class], version = 3, exportSchema = false)
 abstract class NoxDatabase : RoomDatabase() {
     abstract fun dao(): SleepDao
 
@@ -168,6 +192,19 @@ abstract class NoxDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 2 → 3：为分段记录增加类型 kind（sleep / nap）。
+         * 默认 sleep 自动回填历史数据；统计口径完全不变（两类照常相加），
+         * 该字段只用于界面标记、通知文案与小憩的结束判定参数。
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE sleep_session ADD COLUMN kind TEXT NOT NULL DEFAULT 'sleep'"
+                )
+            }
+        }
+
         @Volatile
         private var INSTANCE: NoxDatabase? = null
 
@@ -177,7 +214,7 @@ abstract class NoxDatabase : RoomDatabase() {
                     context.applicationContext,
                     NoxDatabase::class.java,
                     "nox.db"
-                ).addMigrations(MIGRATION_1_2)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

@@ -22,6 +22,7 @@ import com.nox.sleep.R
 import com.nox.sleep.core.hm
 import com.nox.sleep.data.NoxDatabase
 import com.nox.sleep.data.NoxSettings
+import com.nox.sleep.data.SessionKind
 import com.nox.sleep.data.SettingsStore
 import com.nox.sleep.data.SleepRepository
 import com.nox.sleep.domain.WakeLogic
@@ -56,6 +57,10 @@ class SleepTrackingService : Service() {
 
         const val EXTRA_SESSION_ID = "session_id"
         const val EXTRA_START_AT = "start_at"
+        const val EXTRA_KIND = "kind"
+
+        /** 小憩的最短间隔：默认 60 分钟会让整个小憩都够不着自动结束 */
+        private const val NAP_MIN_INTERVAL_MIN = 10
 
         private const val CH_TRACKING = "nox_tracking"
         private const val CH_CONFIRM = "nox_confirm"
@@ -69,11 +74,17 @@ class SleepTrackingService : Service() {
         val awaitingConfirm = MutableStateFlow(false)
         val pendingEndAt = MutableStateFlow(0L)
 
-        fun start(context: Context, sessionId: Long, startAt: Long) {
+        fun start(
+            context: Context,
+            sessionId: Long,
+            startAt: Long,
+            kind: String = SessionKind.Sleep.key
+        ) {
             val i = Intent(context, SleepTrackingService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_SESSION_ID, sessionId)
                 putExtra(EXTRA_START_AT, startAt)
+                putExtra(EXTRA_KIND, kind)
             }
             ContextCompat.startForegroundService(context, i)
         }
@@ -90,6 +101,7 @@ class SleepTrackingService : Service() {
 
     private var sessionId = -1L
     private var startAt = 0L
+    private var nap = false
     private var cfg: NoxSettings = NoxSettings()
 
     private val segments = mutableListOf<LongRange>()
@@ -147,6 +159,7 @@ class SleepTrackingService : Service() {
             ACTION_START -> {
                 sessionId = intent.getLongExtra(EXTRA_SESSION_ID, -1L)
                 startAt = intent.getLongExtra(EXTRA_START_AT, System.currentTimeMillis())
+                nap = intent.getStringExtra(EXTRA_KIND) == SessionKind.Nap.key
                 triggered = false
                 keepSleepingUntil = 0L
                 awaitingConfirm.value = false
@@ -155,7 +168,11 @@ class SleepTrackingService : Service() {
                 interactive = isInteractive()
 
                 startForegroundCompat()
-                scope.launch { cfg = repo.settingsNow() }
+                scope.launch {
+                    cfg = repo.settingsNow()
+                    // 小憩：缩短最短间隔，否则默认 60 分钟会让整个小憩都够不着自动结束
+                    if (nap) cfg = cfg.copy(minIntervalMinutes = NAP_MIN_INTERVAL_MIN)
+                }
                 startTicker()
                 Log.i(TAG, "开始记录 session=$sessionId startAt=$startAt")
             }
@@ -401,9 +418,12 @@ class SleepTrackingService : Service() {
         )
         val mins = elapsed.value / 60_000L
         val awake = awakeMinutes.value
+        val title = getString(
+            if (nap) R.string.notif_tracking_title_nap else R.string.notif_tracking_title
+        )
         return NotificationCompat.Builder(this, CH_TRACKING)
             .setSmallIcon(R.drawable.ic_crescent)
-            .setContentTitle(getString(R.string.notif_tracking_title))
+            .setContentTitle(title)
             .setContentText("已记录 ${hm(mins)} · 累计亮屏 ${awake} 分")
             .setOngoing(true)
             .setSilent(true)

@@ -120,7 +120,7 @@ fun SettingsScreen(
                 .padding(horizontal = 22.dp)
         ) {
             Spacer(Modifier.height(10.dp))
-            NoxTopBar(title = "设置", subtitle = "版本 0.2.0")
+            NoxTopBar(title = "设置", subtitle = "版本 0.3.0")
 
             GroupLabel("记录")
             SettingRow(

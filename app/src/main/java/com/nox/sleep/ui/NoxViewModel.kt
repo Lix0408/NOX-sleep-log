@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.nox.sleep.NoxApplication
 import com.nox.sleep.data.DayAggregate
 import com.nox.sleep.data.NoxSettings
+import com.nox.sleep.data.SessionKind
 import com.nox.sleep.data.SleepSession
 import com.nox.sleep.debug.DebugSeed
 import com.nox.sleep.reminder.BedtimeReminder
@@ -78,12 +79,12 @@ class NoxViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------------ 主流程
 
-    fun startSleep() {
+    fun startSleep(kind: String = SessionKind.Sleep.key) {
         if (active.value != null) return
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-            val id = repo.start(now)
-            SleepTrackingService.start(getApplication(), id, now)
+            val id = repo.start(now, kind)
+            SleepTrackingService.start(getApplication(), id, now, kind)
         }
     }
 

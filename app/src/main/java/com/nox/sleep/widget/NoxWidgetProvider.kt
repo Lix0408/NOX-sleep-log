@@ -88,7 +88,7 @@ open class NoxWidgetProvider : AppWidgetProvider() {
         if (last?.endAt == null) {
             if (wide) {
                 views.setTextViewText(R.id.widget_value, "还没有记录")
-                views.setTextViewText(R.id.widget_sub, "点一下开始入睡")
+                views.setTextViewText(R.id.widget_sub, "点一下开始记录")
                 views.setTextViewText(R.id.widget_streak, "—")
             } else {
                 views.setTextViewText(R.id.widget_label, "NOX")

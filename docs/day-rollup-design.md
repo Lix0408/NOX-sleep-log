@@ -1,6 +1,6 @@
 # 按天分段汇总 · 数据表设计方案
 
-> 版本：v0.2（随 NOX 0.2.0 落地）
+> 版本：v0.3（随 NOX 0.3.0 落地；v0.2 引入本设计，v0.3 增加记录类型 kind）
 > 场景：同一个自然日内有多次分段睡眠记录（夜间主睡眠 / 午睡 / 傍晚小睡……），
 > 每段正向计时，按天把各段时长汇总相加。
 > 本文即实现依据 —— 字段、SQL、公式与代码一一对应。
@@ -31,8 +31,9 @@ sleep_session（每行 = 一段）
 
 ### 1.1 什么是「一段」
 
-每完成一次「开始入睡 → 我醒了」的**正向计时**，产生一条 `sleep_session` 记录（一行 = 一段）。
+每完成一次「进入睡眠 / 小憩 → 我醒了」的**正向计时**，产生一条 `sleep_session` 记录（一行 = 一段）。
 同一天允许多段：每一段独立计时、独立计算自身时长，互不干扰。
+段带**类型标记**（`kind`：睡眠 / 小憩）—— 类型只影响界面文案与结束判定参数，**不影响任何统计口径**。
 
 ### 1.2 归属日规则（本设计的核心决策）
 
@@ -77,7 +78,8 @@ sleep_session（每行 = 一段）
 | `id` | INTEGER | PK 自增 | |
 | `startAt` | INTEGER | NOT NULL | 入睡时刻（UTC 毫秒）。正向计时起点 |
 | `endAt` | INTEGER | 可空 | 结束时刻；NULL = 进行中（**全表至多一行**，由应用层 `startSleep` 前置检查保证） |
-| **`dayKey`** | TEXT | 可空 · **索引** | **归属日 `"yyyy-MM-dd"`（= endAt 本地日期）。本次新增**：收口时写入；进行中为 NULL |
+| **`dayKey`** | TEXT | 可空 · **索引** | **归属日 `"yyyy-MM-dd"`（= endAt 本地日期）。v2 新增**：收口时写入；进行中为 NULL |
+| `kind` | TEXT | NOT NULL · 默认 `'sleep'` | **v3 新增**：记录类型 `sleep`（睡眠）/ `nap`（小憩）。**只作标记 —— 统计口径完全不变，两类照常相加** |
 | `awakeMillis` | INTEGER | NOT NULL | 段内累计清醒（亮屏）毫秒，来自屏幕亮灭监听 |
 | `wakeCount` | INTEGER | NOT NULL | 段内清醒片段数 |
 | `awakeSegments` | TEXT | NOT NULL | `"start,end;start,end"` 清醒时间片，详情页画缺口、醒来检测回溯用 |
@@ -96,7 +98,7 @@ CREATE INDEX index_sleep_session_dayKey ON sleep_session (dayKey);
 > **行式存储（一列多行）+ 分组键**才是可扩展的正解。所谓「各分段时长」
 > 不是独立字段，而是每行由 `startAt/endAt` 派生的展示值 —— 存储只留事实，时长永远算出来。
 
-### 2.2 迁移 SQL（schema 1 → 2）
+### 2.2 迁移 SQL（schema 1 → 2 → 3）
 
 ```sql
 -- 1) 加列（可空：进行中的记录暂不归属）
@@ -109,6 +111,9 @@ WHERE endAt IS NOT NULL;
 
 -- 3) 索引（命名必须与 Room 由 @Entity(indices = [Index("dayKey")]) 生成的预期 schema 一致）
 CREATE INDEX IF NOT EXISTS index_sleep_session_dayKey ON sleep_session (dayKey);
+
+-- 4) 2 → 3：记录类型（默认 sleep 自动回填历史数据；聚合口径不变）
+ALTER TABLE sleep_session ADD COLUMN kind TEXT NOT NULL DEFAULT 'sleep';
 ```
 
 ### 2.3 为什么不建独立的「日汇总表」
@@ -133,7 +138,7 @@ CREATE INDEX IF NOT EXISTS index_sleep_session_dayKey ON sleep_session (dayKey);
 
 | 阶段 | 触发 | 写什么 |
 |---|---|---|
-| 开始 | 点「开始入睡」 | `INSERT` 一行：`startAt = now`，`endAt = NULL`，`dayKey = NULL` |
+| 开始 | 点「进入睡眠」/「小憩」 | `INSERT` 一行：`startAt = now`，`endAt = NULL`，`dayKey = NULL`，`kind = sleep / nap` |
 | 进行中 | 每 30 秒 / 每次息屏 | `checkpoint`：更新 `awakeMillis / wakeCount / awakeSegments`（**不动 dayKey**） |
 | 收口 | 「我醒了」/ 醒来检测确认 | 写入 `endAt`、**`dayKey = dayKeyOf(endAt)`**、最终 `awakeMillis / wakeCount / awakeSegments / confirmedBy / integrity` |
 | 编辑 | 详情页改心情/备注 | 只动 `mood / quality / note`，**时间与 dayKey 永不修改** |
@@ -226,9 +231,10 @@ LIMIT :limit;
 | 场景 | 行为 |
 |---|---|
 | 同日多段 | 逐段入库，聚合自动相加，无任何特殊处理 |
+| 小憩与睡眠 | **完全等价计入汇总**（`kind` 只作标记）：日 / 周 / 月 / 年所有统计照常相加；区别仅在界面文案、通知标题，以及小憩的最短间隔缩短为 10 分钟（默认 60 分钟会让整个小憩够不着自动结束） |
 | 跨零点 | 归属**结束日**；`endAt` 落在哪天就归哪天 |
 | 进行中的段 | `dayKey = NULL`，**不计入任何日的累计**；收口写入后才计入 |
-| 旧版本升级（1→2） | 迁移回填：`strftime(..., 'localtime')`，与 `dayKeyOf()` 等效；进行中的记录保持 NULL |
+| 旧版本升级（1→2、2→3） | 迁移回填：`dayKey` 用 `strftime(..., 'localtime')`（与 `dayKeyOf()` 等效）；`kind` 默认 `'sleep'` 自动补全；进行中的记录保持 `dayKey = NULL` |
 | 换时区 / 出国 | `dayKey` 收口时按**当时**本地时区定死，此后不再重算 —— 历史的归属不会随旅行漂移（时间戳始终是 UTC 毫秒） |
 | 系统时间被改 | 时间戳是数据问题（`integrity` / 版本溯源管）；`dayKey` 只忠实记录「结束时刻换算出的日期」 |
 | 不完整记录（`integrity = 0`） | 本设计照常计入汇总（时长仍有效，只是清醒分钟可能少记）；如需排除，在 `WHERE` 加 `integrity = 1` 即可，口径改动只在一处 |
@@ -263,7 +269,26 @@ LIMIT :limit;
 | 归属日写入 | `data/SleepRepository.kt` → `finish()`；`core/Format.kt` → `dayKeyOf()` |
 | 分钟口径（唯一公式） | `domain/DayRollup.kt` → `inBedMinutesOf / sleptMinutesOf`（`metricsOf` 同源） |
 | 日视图 UI | `ui/DataScreens.kt` → `StatsScreen`（日/周/月/年）→ `DayTotalsView / DayRow / DaySegments` |
-| 单元测试 | `app/src/test/java/com/nox/sleep/DayRollupTest.kt`（归属日 3 例 + 口径 3 例 + 算例 1 例） |
+| 记录类型（小憩标记） | `data/SleepSession.kt` → `SessionKind` / `isNap`；服务层参数 `SleepTrackingService.NAP_MIN_INTERVAL_MIN`；入口按钮在 `ui/CoreScreens.kt`（`NapButton`） |
+| 单元测试 | `app/src/test/java/com/nox/sleep/DayRollupTest.kt`（归属日 3 例 + 口径 3 例 + 算例 1 例）；`SessionKindTest.kt`（解析容错 3 例） |
 | 真机验收 | 旧库升级后 `dayKey` 回填正确；同日多段相加 == 页面各段之和；跨零点归属正确 |
 
 验收口诀：**合计对得上各段之和、跨零点归到醒来那天、升级不丢数据。**
+
+---
+
+## 8. 验收记录（2026-10-11 · Xiaomi 15 Pro / Android 16 / HyperOS）
+
+| 项 | 结果 |
+|---|---|
+| 单元测试（DayRollupTest 7 个，含 §6 算例断言） | ✅ 28/28 全过 |
+| 旧库迁移 1→2（库内含 1 条历史记录） | ✅ `dayKey` 回填 `2026-10-11`、索引就位、零崩溃 |
+| 同日多段累加（3 段真实记录走完整真实流程） | ✅ 当日 3 段 · 在床 6 分 · 睡眠 5 分；逐段 0h00m+0h01m+0h04m = 0h05m 严格相等 |
+| 跨零点归属（样例主睡眠 23:20 → 06:30） | ✅ 归入「今天」 |
+| 30 天样例 · 多段日展开（09 日 3 段） | ✅ 7h53m + 0h30m + 0h30m = 行总 8h53m |
+| 示例数据精确清除（`confirmedBy='sample'`） | ✅ 只删样例，真实记录保留 |
+| release（R8 混淆）升级 0.2.0 | ✅ 零崩溃 |
+| 记录类型迁移 2→3（库内含 1 条记录） | ✅ v2→v3：旧记录回填 `kind='sleep'`、零崩溃（debug 与 release 双包） |
+| 小憩全流程（双按钮 → 小憩中 → 收口保存） | ✅ `kind='nap'` 正确落库；当日合计 = 1+1 = 2 分（**两类照常相加，统计口径不变**） |
+| 双入口与小憩标记（首页 / 日视图 / 详情 / 结算） | ✅ 截图见 `.devtools/_verify_shots/keep/K5~K10` |
+| 单元测试（新增 SessionKindTest 3 个） | ✅ 31/31 全过 |

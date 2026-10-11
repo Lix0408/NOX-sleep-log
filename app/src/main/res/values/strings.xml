@@ -7,6 +7,7 @@
     <string name="notif_channel_reminder">就寝提醒</string>
 
     <string name="notif_tracking_title">正在记录睡眠</string>
+    <string name="notif_tracking_title_nap">正在记录小憩</string>
     <string name="notif_confirm_title">看起来你已经醒了</string>
 
     <string name="reminder_title">该睡了</string>

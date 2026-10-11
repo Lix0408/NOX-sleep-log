@@ -15,8 +15,8 @@ class SleepRepository(
     suspend fun byId(id: Long): SleepSession? = dao.byId(id)
     fun observeById(id: Long): Flow<SleepSession?> = dao.observeById(id)
 
-    suspend fun start(startAt: Long): Long =
-        dao.insert(SleepSession(startAt = startAt, endAt = null))
+    suspend fun start(startAt: Long, kind: String = SessionKind.Sleep.key): Long =
+        dao.insert(SleepSession(startAt = startAt, endAt = null, kind = kind))
 
     suspend fun finish(
         id: Long,

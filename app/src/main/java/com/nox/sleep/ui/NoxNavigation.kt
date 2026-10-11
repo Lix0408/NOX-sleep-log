@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nox.sleep.data.SessionKind
 import com.nox.sleep.ui.components.NoxBackground
 import com.nox.sleep.ui.components.NoxTab
 
@@ -53,7 +54,7 @@ fun NoxRoot(vm: NoxViewModel) {
     var splashPreview by remember { mutableStateOf<SplashStyle?>(null) }
 
     // 只有真的见过活跃会话，才允许因为它消失而离开睡眠中页。
-    // 否则「点开始入睡」那一瞬间 active 还是 null，会被误判成已结束而弹回首页。
+    // 否则「点进入睡眠」那一瞬间 active 还是 null，会被误判成已结束而弹回首页。
     var sawActive by remember { mutableStateOf(false) }
 
     LaunchedEffect(active) {
@@ -140,8 +141,12 @@ fun NoxRoot(vm: NoxViewModel) {
                     latest = sessions.maxByOrNull { it.endAt ?: 0L },
                     weeklyAvgMinutes = weeklyAverage(sessions),
                     streakDays = streak(sessions),
-                    onStart = {
-                        vm.startSleep()
+                    onStartSleep = {
+                        vm.startSleep(SessionKind.Sleep.key)
+                        screen = Screen.Sleeping
+                    },
+                    onStartNap = {
+                        vm.startSleep(SessionKind.Nap.key)
                         screen = Screen.Sleeping
                     },
                     onOpenSettings = { screen = Screen.Settings },
@@ -156,6 +161,7 @@ fun NoxRoot(vm: NoxViewModel) {
                             startAt = cur.startAt,
                             elapsedMillis = elapsed,
                             awakeMinutes = awakeMinutes,
+                            nap = cur.isNap,
                             onWakeUp = {
                                 pendingSummary = cur.id
                                 vm.stopSleep()
@@ -172,6 +178,7 @@ fun NoxRoot(vm: NoxViewModel) {
                     startAt = active?.startAt ?: (pendingEndAt - 60_000L),
                     endAt = if (pendingEndAt > 0L) pendingEndAt else System.currentTimeMillis(),
                     awaitSeconds = settings.confirmWindowSeconds,
+                    nap = active?.isNap == true,
                     onConfirm = {
                         pendingSummary = lastActiveId
                         vm.confirmWake()
