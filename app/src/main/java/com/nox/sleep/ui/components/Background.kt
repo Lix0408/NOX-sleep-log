@@ -78,6 +78,36 @@ private fun maskAlpha(brightness: Int): Float {
 }
 
 /**
+ * 加载自定义背景图（降采样 2 倍，失败/无图返回 null）。
+ * 全局背景与「背景」设置页的效果预览共用，保证两边渲染一致。
+ */
+@Composable
+fun rememberCustomBackgroundBitmap(uri: String?, enabled: Boolean = true): android.graphics.Bitmap? {
+    val ctx = LocalContext.current
+    var bitmap by remember(uri, enabled) {
+        mutableStateOf<android.graphics.Bitmap?>(null)
+    }
+
+    LaunchedEffect(uri, enabled) {
+        if (uri.isNullOrBlank() || !enabled) {
+            bitmap = null
+            return@LaunchedEffect
+        }
+        bitmap = withContext(Dispatchers.IO) {
+            runCatching {
+                ctx.contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
+                    BitmapFactory.decodeStream(
+                        input, null,
+                        BitmapFactory.Options().apply { inSampleSize = 2 }
+                    )
+                }
+            }.getOrNull()
+        }
+    }
+    return bitmap
+}
+
+/**
  * 全局背景。
  *
  * 硬约束：睡眠中页、启动动画、确认卡片不套用背景 —— 由调用方决定是否使用本组件。
@@ -89,28 +119,7 @@ fun NoxBackground(
     applyCustom: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val ctx = LocalContext.current
-    var bitmap by remember(settings.customBackgroundUri) {
-        mutableStateOf<android.graphics.Bitmap?>(null)
-    }
-
-    LaunchedEffect(settings.customBackgroundUri) {
-        val uriStr = settings.customBackgroundUri
-        if (uriStr.isNullOrBlank() || !applyCustom) {
-            bitmap = null
-            return@LaunchedEffect
-        }
-        bitmap = withContext(Dispatchers.IO) {
-            runCatching {
-                ctx.contentResolver.openInputStream(Uri.parse(uriStr))?.use { input ->
-                    BitmapFactory.decodeStream(
-                        input, null,
-                        BitmapFactory.Options().apply { inSampleSize = 2 }
-                    )
-                }
-            }.getOrNull()
-        }
-    }
+    val bitmap = rememberCustomBackgroundBitmap(settings.customBackgroundUri, applyCustom)
 
     Box(modifier.fillMaxSize().background(NoxColor.Void)) {
         val bmp = bitmap

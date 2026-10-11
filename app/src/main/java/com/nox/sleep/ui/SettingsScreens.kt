@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,12 +42,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -74,6 +78,7 @@ import com.nox.sleep.ui.components.NoxTopBar
 import com.nox.sleep.ui.components.PrimaryButton
 import com.nox.sleep.ui.components.SettingRow
 import com.nox.sleep.ui.components.backgroundById
+import com.nox.sleep.ui.components.rememberCustomBackgroundBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -720,7 +725,20 @@ fun BackgroundScreen(
                 .clip(RoundedCornerShape(18.dp))
                 .border(1.dp, NoxColor.LineStrong, RoundedCornerShape(18.dp))
         ) {
-            Box(Modifier.fillMaxSize().background(backgroundById(settings.backgroundId).brush))
+            // 自定义背景：预览直接渲染所选图片（与全局 NoxBackground 同一套加载/模糊口径）
+            val customBmp = rememberCustomBackgroundBitmap(settings.customBackgroundUri)
+            if (customBmp != null) {
+                Image(
+                    bitmap = customBmp.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(settings.backgroundBlur.dp),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(Modifier.fillMaxSize().background(backgroundById(settings.backgroundId).brush))
+            }
             Box(
                 Modifier
                     .fillMaxSize()
@@ -764,7 +782,8 @@ fun BackgroundScreen(
         }
         Spacer(Modifier.height(6.dp))
         MutedText(
-            backgroundById(settings.backgroundId).let { "${it.name} · ${it.desc}" },
+            if (settings.customBackgroundUri != null) "自定义图片 · 已应用到首页"
+            else backgroundById(settings.backgroundId).let { "${it.name} · ${it.desc}" },
             size = 10.5.sp
         )
 
