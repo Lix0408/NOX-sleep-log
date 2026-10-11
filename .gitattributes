@@ -1,0 +1,18 @@
+# 跨平台行尾规范
+# gradlew 必须是 LF，否则在 macOS / Linux 上无法执行
+* text=auto eol=lf
+
+# Windows 脚本用 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不做转换
+*.jar binary
+*.png binary
+*.jpg binary
+*.apk binary
+*.jks binary
+*.keystore binary
+
+# 锁文件合并策略
+gradle.lockfile merge=union

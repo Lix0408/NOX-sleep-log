@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NOX</string>
+
+    <string name="notif_channel_tracking">睡眠记录中</string>
+    <string name="notif_channel_confirm">醒来确认</string>
+    <string name="notif_channel_reminder">就寝提醒</string>
+
+    <string name="notif_tracking_title">正在记录睡眠</string>
+    <string name="notif_confirm_title">看起来你已经醒了</string>
+
+    <string name="reminder_title">该睡了</string>
+    <string name="reminder_text">放下手机，剩下的交给夜。</string>
+
+    <string name="widget_2x2_label">NOX 昨夜睡眠</string>
+    <string name="widget_4x1_label">NOX 连续记录</string>
+</resources>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 月牙背后的柔光 -->
+    <path android:pathData="M 54,30 A 24,24 0 1,0 54,78 A 24,24 0 1,0 54,30 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="26">
+                <item android:offset="0" android:color="#99B0A4FF" />
+                <item android:offset="1" android:color="#00B0A4FF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 月牙本体：由两个圆的差集得到，比例与 App 主按钮完全一致 -->
+    <path android:pathData="M 71.55,33.12 A 23.76,23.76 0 1,0 71.55,74.88 A 21.12,21.12 0 1,1 71.55,33.12 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="0.48" android:color="#FFDCD4FF" />
+                <item android:offset="1" android:color="#FF8B7CF6" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 星点 -->
+    <path android:pathData="M 64.56,37.10 A 1.72,1.72 0 1,0 64.56,40.54 A 1.72,1.72 0 1,0 64.56,37.10 Z"
+        android:fillColor="#EBFFFFFF" />
+    <path android:pathData="M 71.16,47.73 A 0.99,0.99 0 1,0 71.16,49.71 A 0.99,0.99 0 1,0 71.16,47.73 Z"
+        android:fillColor="#CCDCD4FF" />
+    <path android:pathData="M 67.20,63.31 A 1.25,1.25 0 1,0 67.20,65.81 A 1.25,1.25 0 1,0 67.20,63.31 Z"
+        android:fillColor="#9EFFFFFF" />
+
+</vector>
