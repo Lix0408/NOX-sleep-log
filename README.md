@@ -26,14 +26,6 @@ NOX 不做睡眠分期推断，不做鼾声录音，不做社交排行，不需�
 1. 睡前点「开始入睡」
 2. 醒来点「我醒了」
 
-<p align="center">
-  <img src="docs/screenshots/sleeping.png" width="260" alt="睡眠中">
-  &nbsp;&nbsp;&nbsp;
-  <img src="docs/screenshots/reminder.png" width="260" alt="就寝提醒">
-  &nbsp;&nbsp;&nbsp;
-  <img src="docs/screenshots/threshold.png" width="260" alt="亮屏阈值">
-</p>
-
 ## 功能
 
 - **睡眠记录** —— 一键开始 / 结束；切后台、划掉最近任务都不会中断计时
