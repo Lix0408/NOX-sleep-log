@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,6 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.nox.sleep.core.NoxColor
+import com.nox.sleep.core.SleepGuideline
 import com.nox.sleep.core.dateCn
 import com.nox.sleep.data.NoxSettings
 import com.nox.sleep.data.SleepSession
@@ -85,6 +90,8 @@ fun SettingsScreen(
     onUpdate: ((NoxSettings) -> NoxSettings) -> Unit,
     onOpenThreshold: () -> Unit,
     onOpenBackground: () -> Unit,
+    onOpenGuideline: () -> Unit,
+    onOpenSources: () -> Unit,
     onClearAll: () -> Unit,
     onPreviewSplash: (SplashStyle) -> Unit,
     onSeedData: () -> Unit,
@@ -95,6 +102,7 @@ fun SettingsScreen(
     var showBedtimeDialog by remember { mutableStateOf(false) }
     var showSplashDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showHealthRefDialog by remember { mutableStateOf(false) }
     var baseline by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -120,7 +128,7 @@ fun SettingsScreen(
                 .padding(horizontal = 22.dp)
         ) {
             Spacer(Modifier.height(10.dp))
-            NoxTopBar(title = "设置", subtitle = "版本 0.3.0")
+            NoxTopBar(title = "设置", subtitle = "版本 0.4.0")
 
             GroupLabel("记录")
             SettingRow(
@@ -177,6 +185,25 @@ fun SettingsScreen(
                     value = SplashStyle.of(settings.splashStyle).label,
                     showChevron = true,
                     onClick = { showSplashDialog = true }
+                )
+            }
+
+            GroupLabel("健康参照")
+            SettingRow("健康参照", trailing = {
+                NoxToggle(settings.healthReference) { v ->
+                    if (v) showHealthRefDialog = true
+                    else onUpdate { it.copy(healthReference = false) }
+                }
+            })
+            if (settings.healthReference) {
+                SettingRow("为什么是 7–9 小时", showChevron = true, onClick = onOpenGuideline)
+                SettingRow("数据来源", showChevron = true, onClick = onOpenSources)
+                Text(
+                    "基准仅用于提供背景：不参与评分、不改变目标、不发送提醒。",
+                    fontSize = 10.sp,
+                    color = NoxColor.Ink3,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(top = 6.dp)
                 )
             }
 
@@ -279,6 +306,40 @@ fun SettingsScreen(
                         steps = 15,
                         colors = sliderColors()
                     )
+
+                    // WHO 推荐锚点：7–9h 在 4–12h 轴上高亮
+                    Spacer(Modifier.height(12.dp))
+                    Box(Modifier.fillMaxWidth().height(18.dp)) {
+                        val whoStart = (7f - 4f) / 8f
+                        val whoEnd = (9f - 4f) / 8f
+                        val pos = ((v - 240f) / 480f).coerceIn(0f, 1f)
+                        Canvas(Modifier.fillMaxSize()) {
+                            val bw = size.width
+                            val mid = size.height / 2f
+                            val bandH = 8.dp.toPx()
+                            drawRoundRect(
+                                color = NoxColor.Mist.copy(alpha = 0.18f),
+                                topLeft = Offset(bw * whoStart, mid - bandH / 2f),
+                                size = Size(bw * (whoEnd - whoStart), bandH),
+                                cornerRadius = CornerRadius(4f, 4f)
+                            )
+                            val px = bw * pos
+                            drawCircle(color = Color.White, radius = 3.5f, center = Offset(px, mid))
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("4h", fontSize = 9.sp, color = NoxColor.Ink3)
+                        Text("7h", fontSize = 9.sp, color = NoxColor.MistInk)
+                        Text("9h", fontSize = 9.sp, color = NoxColor.MistInk)
+                        Text("12h", fontSize = 9.sp, color = NoxColor.Ink3)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "WHO 推荐成人每晚 7–9 小时。你的目标不必正好卡在区间里 —— 它只是你的个人约定，区间仅作设置时的参考。",
+                        fontSize = 11.sp,
+                        color = NoxColor.Ink3,
+                        lineHeight = 16.sp
+                    )
                 }
             },
             confirmButton = {
@@ -290,6 +351,43 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showGoalDialog = false }) {
                     Text("取消", color = NoxColor.Ink3)
+                }
+            }
+        )
+    }
+
+    if (showHealthRefDialog) {
+        AlertDialog(
+            onDismissRequest = { showHealthRefDialog = false },
+            containerColor = NoxColor.Midnight,
+            title = { Text("开启健康参照", color = NoxColor.Ink, fontSize = 16.sp) },
+            text = {
+                Column {
+                    Text(
+                        "你会看到一条 WHO 推荐的 7–9 小时基准带，以及设置目标时的刻度锚点。它们只做一件事：让你的时长有一个对照。",
+                        fontSize = 12.5.sp, color = NoxColor.Ink2, lineHeight = 19.sp
+                    )
+                    Spacer(Modifier.height(9.dp))
+                    Text(
+                        "基准不会改变你的记录、不会给你打分、不会发送任何通知。",
+                        fontSize = 12.5.sp, color = NoxColor.Ink2, lineHeight = 19.sp
+                    )
+                    Spacer(Modifier.height(9.dp))
+                    Text(
+                        "7–9 小时是一个区间，不是一个及格线 —— 区间内没有「更优」。",
+                        fontSize = 12.5.sp, color = NoxColor.Ink2, lineHeight = 19.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onUpdate { it.copy(healthReference = true) }
+                    showHealthRefDialog = false
+                }) { Text("开启参照", color = NoxColor.Cyan) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHealthRefDialog = false }) {
+                    Text("再想想", color = NoxColor.Ink3)
                 }
             }
         )

@@ -37,6 +37,11 @@ object NoxColor {
     val Good = Color(0xFF6EE7B7)
 
     val Awake = Amber
+
+    // 参照层语义色（阶段四「健康基准」）：只用于描述性/群体共识内容，
+    // 永不用紫/青/琥珀，防止"通用基准"被误读成"系统判定"。
+    val Mist = Color(0xFF8CA3B8)
+    val MistInk = Color(0xFFA9BACB)
 }
 
 object NoxBrush {

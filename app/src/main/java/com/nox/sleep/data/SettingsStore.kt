@@ -41,7 +41,10 @@ data class NoxSettings(
     val customBackgroundUri: String? = null,
     val autoDim: Boolean = true,
     val playSplash: Boolean = true,
-    val splashStyle: String = "collect"
+    val splashStyle: String = "collect",
+
+    // 健康参照（阶段四）：WHO 推荐 7–9 小时基准层，默认关闭、主动开启
+    val healthReference: Boolean = false
 ) {
     val thresholdMillis: Long get() = thresholdMinutes * 60_000L
     val minIntervalMillis: Long get() = minIntervalMinutes * 60_000L
@@ -70,6 +73,7 @@ private object K {
     val AUTO_DIM = booleanPreferencesKey("auto_dim")
     val SPLASH = booleanPreferencesKey("play_splash")
     val SPLASH_STYLE = stringPreferencesKey("splash_style")
+    val HEALTH_REF = booleanPreferencesKey("health_reference")
 }
 
 class SettingsStore(private val context: Context) {
@@ -94,7 +98,8 @@ class SettingsStore(private val context: Context) {
                 customBackgroundUri = p[K.BG_URI],
                 autoDim = p[K.AUTO_DIM] ?: true,
                 playSplash = p[K.SPLASH] ?: true,
-                splashStyle = p[K.SPLASH_STYLE] ?: "collect"
+                splashStyle = p[K.SPLASH_STYLE] ?: "collect",
+                healthReference = p[K.HEALTH_REF] ?: false
             )
         }
 
@@ -121,6 +126,7 @@ class SettingsStore(private val context: Context) {
             p[K.AUTO_DIM] = next.autoDim
             p[K.SPLASH] = next.playSplash
             p[K.SPLASH_STYLE] = next.splashStyle
+            p[K.HEALTH_REF] = next.healthReference
         }
     }
 }

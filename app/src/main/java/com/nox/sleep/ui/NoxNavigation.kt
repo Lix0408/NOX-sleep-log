@@ -31,6 +31,8 @@ sealed interface Screen {
     data object Settings : Screen
     data object Threshold : Screen
     data object Backgrounds : Screen
+    data object Guideline : Screen
+    data object Sources : Screen
     data object Confirm : Screen
 }
 
@@ -49,6 +51,9 @@ fun NoxRoot(vm: NoxViewModel) {
     var screen by remember { mutableStateOf<Screen>(Screen.Splash) }
     var lastActiveId by remember { mutableLongStateOf(0L) }
     var pendingSummary by remember { mutableStateOf<Long?>(null) }
+
+    // 知识屏可能从统计页或设置页进入，返回时回到来源页
+    var guidelineFrom by remember { mutableStateOf<Screen>(Screen.Stats) }
 
     // 设置页里选中动画样式后的一次性预览：非空时全屏播放该动画
     var splashPreview by remember { mutableStateOf<SplashStyle?>(null) }
@@ -101,6 +106,8 @@ fun NoxRoot(vm: NoxViewModel) {
         screen = when (screen) {
             is Screen.Detail, Screen.Stats, Screen.History, Screen.Settings -> Screen.Home
             Screen.Threshold, Screen.Backgrounds -> Screen.Settings
+            Screen.Guideline -> guidelineFrom
+            Screen.Sources -> Screen.Guideline
             is Screen.Summary -> Screen.Home
             Screen.Confirm, Screen.Sleeping -> Screen.Home
             else -> Screen.Home
@@ -214,6 +221,10 @@ fun NoxRoot(vm: NoxViewModel) {
                     dayStats = dayStats,
                     settings = settings,
                     onOpenSettings = { screen = Screen.Settings },
+                    onOpenGuideline = {
+                        guidelineFrom = Screen.Stats
+                        screen = Screen.Guideline
+                    },
                     onPickTab = goTab
                 )
 
@@ -242,11 +253,25 @@ fun NoxRoot(vm: NoxViewModel) {
                     onUpdate = vm::updateSettings,
                     onOpenThreshold = { screen = Screen.Threshold },
                     onOpenBackground = { screen = Screen.Backgrounds },
+                    onOpenGuideline = {
+                        guidelineFrom = Screen.Settings
+                        screen = Screen.Guideline
+                    },
+                    onOpenSources = { screen = Screen.Sources },
                     onClearAll = vm::clearAll,
                     onPreviewSplash = { splashPreview = it },
                     onSeedData = vm::seedSampleData,
                     onClearSamples = vm::clearSampleData,
                     onPickTab = goTab
+                )
+
+                Screen.Guideline -> GuidelineScreen(
+                    onBack = { screen = guidelineFrom },
+                    onOpenSources = { screen = Screen.Sources }
+                )
+
+                Screen.Sources -> SourcesScreen(
+                    onBack = { screen = Screen.Guideline }
                 )
 
                 Screen.Threshold -> ThresholdScreen(

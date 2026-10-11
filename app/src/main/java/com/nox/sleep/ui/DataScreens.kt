@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.nox.sleep.core.NoxBrush
 import com.nox.sleep.core.NoxColor
 import com.nox.sleep.core.NoxIcons
+import com.nox.sleep.core.SleepGuideline
 import com.nox.sleep.core.clock
 import com.nox.sleep.core.dateCn
 import com.nox.sleep.core.hmParts
@@ -180,6 +182,7 @@ fun StatsScreen(
     dayStats: List<DayAggregate>,
     settings: NoxSettings,
     onOpenSettings: () -> Unit,
+    onOpenGuideline: () -> Unit,
     onPickTab: (NoxTab) -> Unit
 ) {
     var mode by remember { mutableIntStateOf(0) }
@@ -205,7 +208,7 @@ fun StatsScreen(
             if (mode == 0) {
                 DayTotalsView(dayStats, sessions, settings)
             } else {
-                RangeStatsView(sessions, settings, RangeMode.entries[mode - 1])
+                RangeStatsView(sessions, settings, RangeMode.entries[mode - 1], onOpenGuideline)
             }
             Spacer(Modifier.height(18.dp))
         }
@@ -217,7 +220,8 @@ fun StatsScreen(
 private fun RangeStatsView(
     sessions: List<SleepSession>,
     settings: NoxSettings,
-    rangeMode: RangeMode
+    rangeMode: RangeMode,
+    onOpenGuideline: () -> Unit
 ) {
     val buckets = remember(sessions, rangeMode, settings.goalMinutes) {
         bucketsFor(sessions, rangeMode, settings.goalMinutes)
@@ -257,7 +261,7 @@ private fun RangeStatsView(
         }
 
         Spacer(Modifier.height(18.dp))
-        BucketChart(buckets, settings.goalMinutes)
+        BucketChart(buckets, settings.goalMinutes, settings.healthReference)
     }
 
     Spacer(Modifier.height(13.dp))
@@ -265,6 +269,11 @@ private fun RangeStatsView(
         MiniStat(hm(avg), "平均时长", Modifier.weight(1f))
         MiniStat(hm(best), "最长", Modifier.weight(1f))
         MiniStat(if (worst > 0) hm(worst) else "—", "最短", Modifier.weight(1f))
+    }
+
+    if (settings.healthReference) {
+        Spacer(Modifier.height(13.dp))
+        GuidelineCompareCard(avgMinutes = avg, onOpen = onOpenGuideline)
     }
 
     Spacer(Modifier.height(13.dp))
@@ -493,25 +502,17 @@ private fun MiniStat(value: String, label: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun BucketChart(buckets: List<Bucket>, goalMinutes: Int) {
+private fun BucketChart(buckets: List<Bucket>, goalMinutes: Int, showGuideline: Boolean) {
     val max = maxOf(
         buckets.maxOfOrNull { it.sleep } ?: 1L,
         (goalMinutes * 1.15).toLong(),
+        (SleepGuideline.ADULT_MAX_MINUTES * 1.08).toLong(),
         60L
     ).toFloat()
 
     Column {
         Box(Modifier.fillMaxWidth().height(118.dp)) {
-            // 目标虚线
-            Canvas(Modifier.fillMaxSize()) {
-                val y = size.height * (1f - goalMinutes / max)
-                drawLine(
-                    color = NoxColor.Cyan.copy(alpha = 0.55f),
-                    start = Offset(0f, y), end = Offset(size.width, y),
-                    strokeWidth = 1.5f,
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(9f, 7f), 0f)
-                )
-            }
+            // 柱（底层）
             Row(
                 Modifier.fillMaxSize(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -534,12 +535,54 @@ private fun BucketChart(buckets: List<Bucket>, goalMinutes: Int) {
                     )
                 }
             }
+            // 基准带（WHO 7–9h，中层）+ 目标虚线（顶层）
+            Canvas(Modifier.fillMaxSize()) {
+                if (showGuideline) {
+                    val bandTop = size.height * (1f - SleepGuideline.ADULT_MAX_MINUTES.toFloat() / max)
+                    val bandBottom = size.height * (1f - SleepGuideline.ADULT_MIN_MINUTES.toFloat() / max)
+                    val bandH = (bandBottom - bandTop).coerceAtLeast(0f)
+                    if (bandH > 0f) {
+                        drawRoundRect(
+                            color = NoxColor.Mist.copy(alpha = 0.09f),
+                            topLeft = Offset(0f, bandTop),
+                            size = Size(size.width, bandH),
+                            cornerRadius = CornerRadius(6f, 6f)
+                        )
+                    }
+                    val dot = PathEffect.dashPathEffect(floatArrayOf(2f, 6f), 0f)
+                    drawLine(
+                        color = NoxColor.Mist.copy(alpha = 0.38f),
+                        start = Offset(0f, bandTop), end = Offset(size.width, bandTop),
+                        strokeWidth = 1f, pathEffect = dot
+                    )
+                    drawLine(
+                        color = NoxColor.Mist.copy(alpha = 0.38f),
+                        start = Offset(0f, bandBottom), end = Offset(size.width, bandBottom),
+                        strokeWidth = 1f, pathEffect = dot
+                    )
+                }
+                val y = size.height * (1f - goalMinutes / max)
+                drawLine(
+                    color = NoxColor.Cyan.copy(alpha = 0.55f),
+                    start = Offset(0f, y), end = Offset(size.width, y),
+                    strokeWidth = 1.5f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(9f, 7f), 0f)
+                )
+            }
             Text(
                 "8h 目标",
                 fontSize = 9.sp,
                 color = NoxColor.Cyan,
                 modifier = Modifier.align(Alignment.TopEnd)
             )
+            if (showGuideline) {
+                Text(
+                    "WHO 7–9h",
+                    fontSize = 9.sp,
+                    color = NoxColor.MistInk,
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
+            }
         }
         Spacer(Modifier.height(9.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -553,6 +596,82 @@ private fun BucketChart(buckets: List<Bucket>, goalMinutes: Int) {
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+    }
+}
+
+/**
+ * 对照卡：把「周均时长」放到 WHO 推荐 7–9 小时的区间带上，给出一个不含评判的位置。
+ * 只陈述"落在 / 低于 / 高于"，不用红绿标记、不催人改变。
+ */
+@Composable
+private fun GuidelineCompareCard(avgMinutes: Long, onOpen: () -> Unit) {
+    val (h, m, _) = hmParts(avgMinutes)
+    val inRange = SleepGuideline.inAdultRange(avgMinutes)
+    val status = when {
+        inRange -> "落在 7–9 小时推荐区间内"
+        avgMinutes < SleepGuideline.ADULT_MIN_MINUTES -> "低于推荐区间的下限 7 小时"
+        else -> "高于推荐区间的上限 9 小时"
+    }
+
+    NoxCard(padding = 15.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Label("对照 WHO 推荐", Modifier.weight(1f))
+            NoxChip("成人 7–9 小时")
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Box(Modifier.fillMaxWidth().height(26.dp)) {
+            val bandStart = SleepGuideline.bandStartFraction
+            val bandEnd = SleepGuideline.bandEndFraction
+            val pos = SleepGuideline.positionFraction(avgMinutes)
+            Canvas(Modifier.fillMaxSize()) {
+                val bw = size.width
+                val top = 7.dp.toPx()
+                val bottom = size.height - 7.dp.toPx()
+                drawRoundRect(
+                    color = NoxColor.Mist.copy(alpha = 0.14f),
+                    topLeft = Offset(bw * bandStart, top),
+                    size = Size(bw * (bandEnd - bandStart), bottom - top),
+                    cornerRadius = CornerRadius(5f, 5f)
+                )
+                val px = bw * pos
+                drawCircle(color = Color.White, radius = 3.5f, center = Offset(px, top))
+                drawLine(
+                    color = Color.White.copy(alpha = 0.9f),
+                    start = Offset(px, top), end = Offset(px, bottom),
+                    strokeWidth = 1.5f
+                )
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("5h", fontSize = 9.sp, color = NoxColor.Ink3)
+            Text("7h", fontSize = 9.sp, color = NoxColor.Ink3)
+            Text("9h", fontSize = 9.sp, color = NoxColor.Ink3)
+            Text("11h", fontSize = 9.sp, color = NoxColor.Ink3)
+        }
+
+        Spacer(Modifier.height(11.dp))
+        MutedText("周均 ${h}h${m}m · $status", size = 11.5.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(
+            "区间是健康参考，不是考核线 —— 区间内没有「更优」。",
+            fontSize = 10.sp,
+            color = NoxColor.Ink3,
+            lineHeight = 15.sp
+        )
+
+        Spacer(Modifier.height(6.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpen)
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(SleepGuideline.SOURCE_LABEL, fontSize = 9.5.sp, color = NoxColor.Ink3)
+            Text("了解这条基准 ›", fontSize = 11.sp, color = NoxColor.MistInk)
         }
     }
 }
