@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
@@ -26,7 +27,14 @@ import androidx.compose.ui.unit.dp
  *
  *   外弧：圆 (59.41, 50) r=36，从 (76.59, 18.37) 逆时针经最左点 (23.41, 50) 到 (76.59, 81.63)
  *   内弧：圆 (71.73, 50) r=32，从 (76.59, 81.63) 顺时针经最左点 (39.73, 50) 回到起点
+ *
+ * 2026-10-11 起：整体逆时针倾斜 [CRESCENT_TILT_DEG]，让月牙更有夜空垂挂感。
+ * 该角度是全项目统一值（应用图标 / 主按钮 / 启动动画 / 通知图标共用），
+ * 渲染时由 [Crescent] / [GlowingCrescent] 统一施加；res/drawable 下的
+ * 4 个矢量文件用 group rotation 实现同一角度，调整时须同步。
  */
+const val CRESCENT_TILT_DEG = -12f
+
 fun crescentPath(): Path = Path().apply {
     moveTo(76.59f, 18.37f)
     arcTo(
@@ -53,8 +61,10 @@ fun Crescent(
 ) {
     Canvas(modifier.size(size)) {
         val s = this.size.minDimension / 100f
-        scale(s, s, pivot = Offset.Zero) {
-            drawPath(crescentPath(), brush = brush)
+        rotate(CRESCENT_TILT_DEG, pivot = this.center) {
+            scale(s, s, pivot = Offset.Zero) {
+                drawPath(crescentPath(), brush = brush)
+            }
         }
     }
 }
@@ -85,8 +95,10 @@ fun GlowingCrescent(
                 center = Offset(cx, cy)
             )
             val s = this.size.minDimension / 100f
-            scale(s, s, pivot = Offset.Zero) {
-                drawPath(crescentPath(), brush = NoxBrush.Moon)
+            rotate(CRESCENT_TILT_DEG, pivot = this.center) {
+                scale(s, s, pivot = Offset.Zero) {
+                    drawPath(crescentPath(), brush = NoxBrush.Moon)
+                }
             }
         }
     }

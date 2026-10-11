@@ -1,5 +1,6 @@
 package com.nox.sleep.data
 
+import com.nox.sleep.core.dayKeyOf
 import kotlinx.coroutines.flow.Flow
 
 class SleepRepository(
@@ -30,6 +31,9 @@ class SleepRepository(
         dao.update(
             cur.copy(
                 endAt = endAt,
+                // 归属日随收口一次定死：= 结束时刻的本地日期（起床日）。
+                // 之后时间戳不可编辑，dayKey 无需重算；换时区也不影响历史归属。
+                dayKey = dayKeyOf(endAt),
                 awakeMillis = awakeMillis,
                 wakeCount = wakeCount,
                 confirmedBy = confirmedBy,
@@ -83,4 +87,11 @@ class SleepRepository(
         settings.update(transform)
 
     val settingsFlow: Flow<NoxSettings> = settings.flow
+
+    /** 按天汇总（最近 limit 个有记录的天），统计页「日」视图的数据源 */
+    fun dayAggregates(limit: Int): Flow<List<DayAggregate>> = dao.observeDayAggregates(limit)
+
+    // ---- 仅调试包使用：示例数据工具（按钮被 BuildConfig.DEBUG 保护，release 不可见）----
+    suspend fun insertSample(s: SleepSession): Long = dao.insert(s)
+    suspend fun clearSamples() = dao.deleteSamples()
 }

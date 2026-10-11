@@ -74,6 +74,15 @@ fun hms(millis: Long): String {
 fun sleepDayOf(endAt: Long): LocalDate =
     Instant.ofEpochMilli(endAt).atZone(zone).toLocalDate()
 
+/**
+ * 归属日 key "yyyy-MM-dd"（= 结束时刻的本地日期，即起床日）。
+ *
+ * 分段记录结束时写入该值（见 SleepRepository.finish / NoxDatabase 迁移 1→2），
+ * 按天汇总以它为分组键。带 zone 参数是为了让归属规则可测试 —— 测试里传入固定时区。
+ */
+fun dayKeyOf(endAt: Long, zone: ZoneId = ZoneId.systemDefault()): String =
+    Instant.ofEpochMilli(endAt).atZone(zone).toLocalDate().toString()
+
 fun greetingFor(hour: Int): String = when {
     hour in 0..4 -> "夜深了"
     hour in 5..10 -> "早上好"

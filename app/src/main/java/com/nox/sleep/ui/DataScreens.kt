@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,9 +54,12 @@ import com.nox.sleep.core.clock
 import com.nox.sleep.core.dateCn
 import com.nox.sleep.core.hmParts
 import com.nox.sleep.core.weekdayCn
+import com.nox.sleep.data.DayAggregate
 import com.nox.sleep.data.NoxSettings
 import com.nox.sleep.data.SleepSession
+import com.nox.sleep.domain.inBedMinutesOf
 import com.nox.sleep.domain.metricsOf
+import com.nox.sleep.domain.sleptMinutesOf
 import com.nox.sleep.ui.components.BigDuration
 import com.nox.sleep.ui.components.CircleIconButton
 import com.nox.sleep.ui.components.Label
@@ -83,11 +87,27 @@ private fun startOfDay(d: LocalDate): Long =
 
 private fun spanMinutes(s: SleepSession): Long {
     val e = s.endAt ?: return 0L
-    return ((e - s.startAt) / 60_000L).coerceAtLeast(0L)
+    return inBedMinutesOf(s.startAt, e)
 }
 
-private fun sleepMinutes(s: SleepSession): Long =
-    (spanMinutes(s) - s.awakeMillis / 60_000L).coerceAtLeast(0L)
+private fun sleepMinutes(s: SleepSession): Long {
+    val e = s.endAt ?: return 0L
+    return sleptMinutesOf(s.startAt, e, s.awakeMillis)
+}
+
+/** 归属日 key 的展示文案：今天 / 昨天 / 周几 */
+private val WEEKDAYS = arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+
+private fun dayLabelOf(dayKey: String): String {
+    val today = LocalDate.now()
+    return when (dayKey) {
+        today.toString() -> "今天"
+        today.minusDays(1).toString() -> "昨天"
+        else -> WEEKDAYS[LocalDate.parse(dayKey).dayOfWeek.value - 1]
+    }
+}
+
+private val CIRCLED = listOf("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩")
 
 /* ================================================================== 聚合 */
 
@@ -157,26 +177,12 @@ private fun bucketsFor(
 @Composable
 fun StatsScreen(
     sessions: List<SleepSession>,
+    dayStats: List<DayAggregate>,
     settings: NoxSettings,
     onOpenSettings: () -> Unit,
     onPickTab: (NoxTab) -> Unit
 ) {
     var mode by remember { mutableIntStateOf(0) }
-    val rangeMode = RangeMode.entries[mode]
-    val buckets = remember(sessions, mode, settings.goalMinutes) {
-        bucketsFor(sessions, rangeMode, settings.goalMinutes)
-    }
-
-    val valid = buckets.filter { it.sleep > 0 }
-    val avg = if (valid.isEmpty()) 0L else valid.sumOf { it.sleep } / valid.size
-    val best = valid.maxByOrNull { it.sleep }?.sleep ?: 0L
-    val worst = valid.minByOrNull { it.sleep }?.sleep ?: 0L
-    val hitCount = buckets.count { it.goalHit && it.sleep > 0 }
-    val hitTotal = buckets.count { it.sleep > 0 }
-    val avgPercent = if (settings.goalMinutes <= 0) 0
-    else ((avg * 100.0) / settings.goalMinutes).roundToInt().coerceIn(0, 100)
-
-    val (ah, am, _) = hmParts(avg)
 
     Column(Modifier.fillMaxSize()) {
         Column(
@@ -193,51 +199,270 @@ fun StatsScreen(
             )
 
             Spacer(Modifier.height(12.dp))
-            Segmented(listOf("周", "月", "年"), mode) { mode = it }
+            Segmented(listOf("日", "周", "月", "年"), mode) { mode = it }
 
             Spacer(Modifier.height(14.dp))
-            NoxCard(padding = 16.dp) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Label(if (mode == 0) "本周平均" else if (mode == 1) "近四周平均" else "近一年平均")
-                        Spacer(Modifier.height(4.dp))
-                        BigDuration(ah, am, bigSize = 27.sp, unitSize = 13.sp)
-                    }
-                    RingProgress(
-                        percent = avgPercent,
-                        size = 60.dp,
-                        stroke = 7.dp,
-                        centerTitle = "$avgPercent%",
-                        centerSub = "达成"
-                    )
-                }
-
-                Spacer(Modifier.height(18.dp))
-                BucketChart(buckets, settings.goalMinutes)
-            }
-
-            Spacer(Modifier.height(13.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MiniStat(hm(avg), "平均时长", Modifier.weight(1f))
-                MiniStat(hm(best), "最长", Modifier.weight(1f))
-                MiniStat(if (worst > 0) hm(worst) else "—", "最短", Modifier.weight(1f))
-            }
-
-            Spacer(Modifier.height(13.dp))
-            NoxCard(padding = 15.dp) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    MutedText("$hitCount / $hitTotal 段达成目标", Modifier.weight(1f))
-                    Text(
-                        if (avgPercent >= 100) "已达成" else "还差 ${(settings.goalMinutes - avg).coerceAtLeast(0)} 分",
-                        fontSize = 12.5.sp,
-                        color = NoxColor.Cyan,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+            if (mode == 0) {
+                DayTotalsView(dayStats, sessions, settings)
+            } else {
+                RangeStatsView(sessions, settings, RangeMode.entries[mode - 1])
             }
             Spacer(Modifier.height(18.dp))
         }
         NoxBottomBar(NoxTab.Stats, onPickTab)
+    }
+}
+
+@Composable
+private fun RangeStatsView(
+    sessions: List<SleepSession>,
+    settings: NoxSettings,
+    rangeMode: RangeMode
+) {
+    val buckets = remember(sessions, rangeMode, settings.goalMinutes) {
+        bucketsFor(sessions, rangeMode, settings.goalMinutes)
+    }
+
+    val valid = buckets.filter { it.sleep > 0 }
+    val avg = if (valid.isEmpty()) 0L else valid.sumOf { it.sleep } / valid.size
+    val best = valid.maxByOrNull { it.sleep }?.sleep ?: 0L
+    val worst = valid.minByOrNull { it.sleep }?.sleep ?: 0L
+    val hitCount = buckets.count { it.goalHit && it.sleep > 0 }
+    val hitTotal = buckets.count { it.sleep > 0 }
+    val avgPercent = if (settings.goalMinutes <= 0) 0
+    else ((avg * 100.0) / settings.goalMinutes).roundToInt().coerceIn(0, 100)
+
+    val (ah, am, _) = hmParts(avg)
+
+    NoxCard(padding = 16.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Label(
+                    when (rangeMode) {
+                        RangeMode.Week -> "本周平均"
+                        RangeMode.Month -> "近四周平均"
+                        RangeMode.Year -> "近一年平均"
+                    }
+                )
+                Spacer(Modifier.height(4.dp))
+                BigDuration(ah, am, bigSize = 27.sp, unitSize = 13.sp)
+            }
+            RingProgress(
+                percent = avgPercent,
+                size = 60.dp,
+                stroke = 7.dp,
+                centerTitle = "$avgPercent%",
+                centerSub = "达成"
+            )
+        }
+
+        Spacer(Modifier.height(18.dp))
+        BucketChart(buckets, settings.goalMinutes)
+    }
+
+    Spacer(Modifier.height(13.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        MiniStat(hm(avg), "平均时长", Modifier.weight(1f))
+        MiniStat(hm(best), "最长", Modifier.weight(1f))
+        MiniStat(if (worst > 0) hm(worst) else "—", "最短", Modifier.weight(1f))
+    }
+
+    Spacer(Modifier.height(13.dp))
+    NoxCard(padding = 15.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MutedText("$hitCount / $hitTotal 段达成目标", Modifier.weight(1f))
+            Text(
+                if (avgPercent >= 100) "已达成" else "还差 ${(settings.goalMinutes - avg).coerceAtLeast(0)} 分",
+                fontSize = 12.5.sp,
+                color = NoxColor.Cyan,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+/* -------------------------------------------------------- 按天汇总（日视图） */
+
+/**
+ * 日视图：同一天内的多段睡眠合并为「当日累计」。
+ *
+ * 归属规则 = 结束时刻所在本地日期（起床日）：夜里跨零点的主睡眠记到醒来那天，
+ * 白天的小睡与它同归一天 —— 「今天睡了多久」就是当天所有段相加。
+ */
+@Composable
+private fun DayTotalsView(
+    dayStats: List<DayAggregate>,
+    sessions: List<SleepSession>,
+    settings: NoxSettings
+) {
+    val todayKey = LocalDate.now().toString()
+    val today = dayStats.firstOrNull { it.dayKey == todayKey }
+
+    NoxCard(padding = 16.dp) {
+        Label("今天 · ${dateCn(System.currentTimeMillis())}")
+        if (today == null) {
+            Spacer(Modifier.height(10.dp))
+            MutedText("今天还没有完成的睡眠记录。完成一段「开始入睡 → 我醒了」后，会并入当日累计。")
+        } else {
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    val (th, tm, _) = hmParts(today.sleptMinutes)
+                    BigDuration(th, tm, bigSize = 27.sp, unitSize = 13.sp)
+                }
+                val percent = if (settings.goalMinutes <= 0) 0
+                else ((today.sleptMinutes * 100.0) / settings.goalMinutes).roundToInt().coerceIn(0, 100)
+                RingProgress(
+                    percent = percent,
+                    size = 60.dp,
+                    stroke = 7.dp,
+                    centerTitle = "$percent%",
+                    centerSub = "达成"
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            MutedText(
+                "共 ${today.segmentCount} 段 · 在床 ${hm(today.inBedMinutes)} · " +
+                    "清醒 ${hm(today.inBedMinutes - today.sleptMinutes)}",
+                size = 11.5.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            DaySegments(sessions.filter { it.dayKey == todayKey })
+        }
+    }
+
+    if (dayStats.isEmpty()) return
+
+    Spacer(Modifier.height(13.dp))
+    MutedText("当日累计 = 当天各段实际睡眠相加（每段 = 在床 − 清醒）。点任意一天展开分段明细。", size = 10.5.sp)
+
+    Spacer(Modifier.height(13.dp))
+    Label("按天汇总 · 最近 30 天")
+    Spacer(Modifier.height(6.dp))
+
+    var expanded by remember { mutableStateOf<String?>(null) }
+    val best = dayStats.maxOfOrNull { it.sleptMinutes } ?: 1L
+
+    NoxCard(padding = 4.dp) {
+        dayStats.forEachIndexed { i, d ->
+            DayRow(
+                d = d,
+                sessions = sessions,
+                maxMinutes = best,
+                goalMinutes = settings.goalMinutes,
+                expanded = expanded == d.dayKey,
+                onToggle = { expanded = if (expanded == d.dayKey) null else d.dayKey }
+            )
+            if (i != dayStats.lastIndex) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x0EFFFFFF)))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayRow(
+    d: DayAggregate,
+    sessions: List<SleepSession>,
+    maxMinutes: Long,
+    goalMinutes: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    val date = LocalDate.parse(d.dayKey)
+    val frac = if (maxMinutes <= 0L) 0f
+    else (d.sleptMinutes.toFloat() / maxMinutes).coerceIn(0.05f, 1f)
+    val hit = d.sleptMinutes >= goalMinutes
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 11.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.size(width = 46.dp, height = 34.dp)) {
+                Text(
+                    date.dayOfMonth.toString().padStart(2, '0'),
+                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = NoxColor.Ink
+                )
+                Label(dayLabelOf(d.dayKey), fontSize = 10.sp)
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(8.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x14FFFFFF))
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(frac)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(NoxBrush.Moon)
+                )
+            }
+            Spacer(Modifier.size(12.dp))
+            // 只限宽不限高：两行文字（时长 + N 段）自然排布，固定高度会把第二行裁掉
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.width(62.dp)
+            ) {
+                Text(
+                    hm(d.sleptMinutes),
+                    fontSize = 13.sp,
+                    color = if (hit) NoxColor.Ink else NoxColor.Ink2
+                )
+                if (d.segmentCount > 1) {
+                    Text("${d.segmentCount} 段", fontSize = 9.5.sp, color = NoxColor.VioletLt)
+                }
+            }
+        }
+        if (expanded) {
+            Column(
+                Modifier
+                    .padding(start = 57.dp, end = 11.dp)
+                    .padding(bottom = 10.dp)
+            ) {
+                DaySegments(sessions.filter { it.dayKey == d.dayKey })
+            }
+        }
+    }
+}
+
+/** 一天内的分段明细：每行 = 序号 · 起止时刻 ·（清醒扣减）· 该段睡眠时长 */
+@Composable
+private fun DaySegments(segments: List<SleepSession>) {
+    segments.sortedBy { it.startAt }.forEachIndexed { i, s ->
+        val e = s.endAt ?: return@forEachIndexed
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "${CIRCLED.getOrElse(i) { "${i + 1}." }} ${clock(s.startAt)} → ${clock(e)}",
+                fontSize = 11.5.sp,
+                color = NoxColor.Ink2,
+                modifier = Modifier.weight(1f)
+            )
+            val awakeMin = s.awakeMillis / 60_000L
+            if (awakeMin > 0) {
+                Text("清醒 ${awakeMin}m", fontSize = 10.sp, color = NoxColor.Amber)
+                Spacer(Modifier.size(8.dp))
+            }
+            Text(
+                hm(sleptMinutesOf(s.startAt, e, s.awakeMillis)),
+                fontSize = 12.sp,
+                color = NoxColor.Ink
+            )
+        }
     }
 }
 

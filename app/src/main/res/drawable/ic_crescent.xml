@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 通知小图标：单色月牙剪影。倾斜角与 Brand.kt 的 CRESCENT_TILT_DEG 保持一致。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="100"
     android:viewportHeight="100">
-    <path
-        android:pathData="M 76.59,18.37 A 36,36 0 1,0 76.59,81.63 A 32,32 0 1,1 76.59,18.37 Z"
-        android:fillColor="#FFFFFFFF" />
+    <group
+        android:rotation="-12"
+        android:pivotX="50"
+        android:pivotY="50">
+        <path
+            android:pathData="M 76.59,18.37 A 36,36 0 1,0 76.59,81.63 A 32,32 0 1,1 76.59,18.37 Z"
+            android:fillColor="#FFFFFFFF" />
+    </group>
 </vector>

@@ -4,8 +4,10 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nox.sleep.NoxApplication
+import com.nox.sleep.data.DayAggregate
 import com.nox.sleep.data.NoxSettings
 import com.nox.sleep.data.SleepSession
+import com.nox.sleep.debug.DebugSeed
 import com.nox.sleep.reminder.BedtimeReminder
 import com.nox.sleep.service.SleepTrackingService
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,6 +25,10 @@ class NoxViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, NoxSettings())
 
     val sessions: StateFlow<List<SleepSession>> = repo.all
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 按天汇总（最近 30 个有记录的天），统计页「日」视图的数据源 */
+    val dayStats: StateFlow<List<DayAggregate>> = repo.dayAggregates(30)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val active: StateFlow<SleepSession?> = repo.active
@@ -120,6 +126,15 @@ class NoxViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearAll() {
         viewModelScope.launch { repo.clearAll() }
+    }
+
+    /** 仅调试包：生成 / 清除示例数据（用于验收「按天汇总」） */
+    fun seedSampleData() {
+        viewModelScope.launch { DebugSeed.seed(repo) }
+    }
+
+    fun clearSampleData() {
+        viewModelScope.launch { repo.clearSamples() }
     }
 
     fun updateSettings(transform: (NoxSettings) -> NoxSettings) {

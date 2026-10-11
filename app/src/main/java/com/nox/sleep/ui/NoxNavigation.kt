@@ -43,10 +43,14 @@ fun NoxRoot(vm: NoxViewModel) {
     val awakeMinutes by vm.awakeMinutes.collectAsStateWithLifecycle()
     val awaitingConfirm by vm.awaitingConfirm.collectAsStateWithLifecycle()
     val pendingEndAt by vm.pendingEndAt.collectAsStateWithLifecycle()
+    val dayStats by vm.dayStats.collectAsStateWithLifecycle()
 
     var screen by remember { mutableStateOf<Screen>(Screen.Splash) }
     var lastActiveId by remember { mutableLongStateOf(0L) }
     var pendingSummary by remember { mutableStateOf<Long?>(null) }
+
+    // 设置页里选中动画样式后的一次性预览：非空时全屏播放该动画
+    var splashPreview by remember { mutableStateOf<SplashStyle?>(null) }
 
     // 只有真的见过活跃会话，才允许因为它消失而离开睡眠中页。
     // 否则「点开始入睡」那一瞬间 active 还是 null，会被误判成已结束而弹回首页。
@@ -102,10 +106,11 @@ fun NoxRoot(vm: NoxViewModel) {
         }
     }
 
-    // 背景只在允许套用的页面生效：睡眠中、启动动画、确认卡片一律纯深色
+    // 背景只在允许套用的页面生效：睡眠中、启动动画、确认卡片与动画预览一律纯深色
     val allowBackground = screen != Screen.Sleeping &&
         screen != Screen.Splash &&
-        screen != Screen.Confirm
+        screen != Screen.Confirm &&
+        splashPreview == null
 
     NoxBackground(settings = settings, applyCustom = allowBackground) {
         Box(
@@ -115,16 +120,20 @@ fun NoxRoot(vm: NoxViewModel) {
         ) {
             when (val s = screen) {
 
-                Screen.Splash -> SplashScreen(
-                    autoAdvanceMillis = if (settings.playSplash) 4200L else 350L,
-                    onFinish = {
-                        screen = when {
-                            awaitingConfirm -> Screen.Confirm
-                            active != null -> Screen.Sleeping
-                            else -> Screen.Home
+                Screen.Splash -> {
+                    val splashStyle = SplashStyle.of(settings.splashStyle)
+                    SplashScreen(
+                        style = splashStyle,
+                        autoAdvanceMillis = if (settings.playSplash) splashStyle.durationMillis else 350L,
+                        onFinish = {
+                            screen = when {
+                                awaitingConfirm -> Screen.Confirm
+                                active != null -> Screen.Sleeping
+                                else -> Screen.Home
+                            }
                         }
-                    }
-                )
+                    )
+                }
 
                 Screen.Home -> HomeScreen(
                     settings = settings,
@@ -195,6 +204,7 @@ fun NoxRoot(vm: NoxViewModel) {
 
                 Screen.Stats -> StatsScreen(
                     sessions = sessions,
+                    dayStats = dayStats,
                     settings = settings,
                     onOpenSettings = { screen = Screen.Settings },
                     onPickTab = goTab
@@ -226,6 +236,9 @@ fun NoxRoot(vm: NoxViewModel) {
                     onOpenThreshold = { screen = Screen.Threshold },
                     onOpenBackground = { screen = Screen.Backgrounds },
                     onClearAll = vm::clearAll,
+                    onPreviewSplash = { splashPreview = it },
+                    onSeedData = vm::seedSampleData,
+                    onClearSamples = vm::clearSampleData,
                     onPickTab = goTab
                 )
 
@@ -240,6 +253,15 @@ fun NoxRoot(vm: NoxViewModel) {
                     settings = settings,
                     onUpdate = vm::updateSettings,
                     onBack = { screen = Screen.Settings }
+                )
+            }
+
+            // 设置页触发的一次性预览：全屏播放所选动画，点击或播完自动退出
+            splashPreview?.let { st ->
+                SplashScreen(
+                    style = st,
+                    autoAdvanceMillis = st.durationMillis,
+                    onFinish = { splashPreview = null }
                 )
             }
         }

@@ -40,7 +40,8 @@ data class NoxSettings(
     val backgroundBlur: Int = 12,
     val customBackgroundUri: String? = null,
     val autoDim: Boolean = true,
-    val playSplash: Boolean = true
+    val playSplash: Boolean = true,
+    val splashStyle: String = "collect"
 ) {
     val thresholdMillis: Long get() = thresholdMinutes * 60_000L
     val minIntervalMillis: Long get() = minIntervalMinutes * 60_000L
@@ -68,6 +69,7 @@ private object K {
     val BG_URI = stringPreferencesKey("custom_background_uri")
     val AUTO_DIM = booleanPreferencesKey("auto_dim")
     val SPLASH = booleanPreferencesKey("play_splash")
+    val SPLASH_STYLE = stringPreferencesKey("splash_style")
 }
 
 class SettingsStore(private val context: Context) {
@@ -91,7 +93,8 @@ class SettingsStore(private val context: Context) {
                 backgroundBlur = p[K.BG_BLUR] ?: 12,
                 customBackgroundUri = p[K.BG_URI],
                 autoDim = p[K.AUTO_DIM] ?: true,
-                playSplash = p[K.SPLASH] ?: true
+                playSplash = p[K.SPLASH] ?: true,
+                splashStyle = p[K.SPLASH_STYLE] ?: "collect"
             )
         }
 
@@ -117,6 +120,7 @@ class SettingsStore(private val context: Context) {
             else p[K.BG_URI] = next.customBackgroundUri
             p[K.AUTO_DIM] = next.autoDim
             p[K.SPLASH] = next.playSplash
+            p[K.SPLASH_STYLE] = next.splashStyle
         }
     }
 }

@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标前景：月牙 + 星点。
+  月牙与星点作为一个整体逆时针倾斜 12°（与 Brand.kt 的 CRESCENT_TILT_DEG 一致），
+  柔光圆为圆形，不参与旋转。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -20,28 +25,34 @@
         </aapt:attr>
     </path>
 
-    <!-- 月牙本体：由两个圆的差集得到，比例与 App 主按钮完全一致 -->
-    <path android:pathData="M 71.55,33.12 A 23.76,23.76 0 1,0 71.55,74.88 A 21.12,21.12 0 1,1 71.55,33.12 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="0"
-                android:startY="0"
-                android:endX="108"
-                android:endY="108">
-                <item android:offset="0" android:color="#FFFFFFFF" />
-                <item android:offset="0.48" android:color="#FFDCD4FF" />
-                <item android:offset="1" android:color="#FF8B7CF6" />
-            </gradient>
-        </aapt:attr>
-    </path>
+    <group
+        android:rotation="-12"
+        android:pivotX="54"
+        android:pivotY="54">
 
-    <!-- 星点 -->
-    <path android:pathData="M 64.56,37.10 A 1.72,1.72 0 1,0 64.56,40.54 A 1.72,1.72 0 1,0 64.56,37.10 Z"
-        android:fillColor="#EBFFFFFF" />
-    <path android:pathData="M 71.16,47.73 A 0.99,0.99 0 1,0 71.16,49.71 A 0.99,0.99 0 1,0 71.16,47.73 Z"
-        android:fillColor="#CCDCD4FF" />
-    <path android:pathData="M 67.20,63.31 A 1.25,1.25 0 1,0 67.20,65.81 A 1.25,1.25 0 1,0 67.20,63.31 Z"
-        android:fillColor="#9EFFFFFF" />
+        <!-- 月牙本体：由两个圆的差集得到，比例与 App 主按钮完全一致 -->
+        <path android:pathData="M 71.55,33.12 A 23.76,23.76 0 1,0 71.55,74.88 A 21.12,21.12 0 1,1 71.55,33.12 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="0"
+                    android:startY="0"
+                    android:endX="108"
+                    android:endY="108">
+                    <item android:offset="0" android:color="#FFFFFFFF" />
+                    <item android:offset="0.48" android:color="#FFDCD4FF" />
+                    <item android:offset="1" android:color="#FF8B7CF6" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- 星点 -->
+        <path android:pathData="M 64.56,37.10 A 1.72,1.72 0 1,0 64.56,40.54 A 1.72,1.72 0 1,0 64.56,37.10 Z"
+            android:fillColor="#EBFFFFFF" />
+        <path android:pathData="M 71.16,47.73 A 0.99,0.99 0 1,0 71.16,49.71 A 0.99,0.99 0 1,0 71.16,47.73 Z"
+            android:fillColor="#CCDCD4FF" />
+        <path android:pathData="M 67.20,63.31 A 1.25,1.25 0 1,0 67.20,65.81 A 1.25,1.25 0 1,0 67.20,63.31 Z"
+            android:fillColor="#9EFFFFFF" />
+    </group>
 
 </vector>

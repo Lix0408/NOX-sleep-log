@@ -23,9 +23,10 @@ data class SleepMetrics(
 )
 
 fun metricsOf(startAt: Long, endAt: Long, awakeMillis: Long, goalMinutes: Int): SleepMetrics {
-    val inBed = ((endAt - startAt) / 60_000L).coerceAtLeast(0L)
-    val awake = (awakeMillis / 60_000L).coerceIn(0L, inBed)
-    val sleep = (inBed - awake).coerceAtLeast(0L)
+    // 与 domain/DayRollup.kt 共用同一分钟换算，避免两处口径漂移
+    val inBed = inBedMinutesOf(startAt, endAt)
+    val sleep = sleptMinutesOf(startAt, endAt, awakeMillis)
+    val awake = inBed - sleep
     val eff = if (inBed <= 0L) 0 else ((sleep * 100.0) / inBed).roundToInt()
     val goal = if (goalMinutes <= 0) 0 else ((sleep * 100.0) / goalMinutes).roundToInt()
     return SleepMetrics(inBed, awake, sleep, eff, goal)

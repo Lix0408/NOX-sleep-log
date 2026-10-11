@@ -86,10 +86,14 @@ fun SettingsScreen(
     onOpenThreshold: () -> Unit,
     onOpenBackground: () -> Unit,
     onClearAll: () -> Unit,
+    onPreviewSplash: (SplashStyle) -> Unit,
+    onSeedData: () -> Unit,
+    onClearSamples: () -> Unit,
     onPickTab: (NoxTab) -> Unit
 ) {
     var showGoalDialog by remember { mutableStateOf(false) }
     var showBedtimeDialog by remember { mutableStateOf(false) }
+    var showSplashDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
     var baseline by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
@@ -116,7 +120,7 @@ fun SettingsScreen(
                 .padding(horizontal = 22.dp)
         ) {
             Spacer(Modifier.height(10.dp))
-            NoxTopBar(title = "设置", subtitle = "版本 0.1.0")
+            NoxTopBar(title = "设置", subtitle = "版本 0.2.0")
 
             GroupLabel("记录")
             SettingRow(
@@ -167,6 +171,14 @@ fun SettingsScreen(
             SettingRow("播放启动动画", trailing = {
                 NoxToggle(settings.playSplash) { v -> onUpdate { it.copy(playSplash = v) } }
             })
+            if (settings.playSplash) {
+                SettingRow(
+                    "动画样式",
+                    value = SplashStyle.of(settings.splashStyle).label,
+                    showChevron = true,
+                    onClick = { showSplashDialog = true }
+                )
+            }
 
             GroupLabel("数据")
             SettingRow(
@@ -185,7 +197,8 @@ fun SettingsScreen(
             )
 
             // 仅 debug 包可见。醒来检测的全链路（累计亮屏 → 触发 → 确认卡片）
-            // 在真实参数下要等一整晚才能验，这里把阈值压到 1 分钟做快速自测。
+            // 在真实参数下要等一整晚才能验，这里把阈值压到 1 分钟做快速自测；
+            // 示例数据用于验收「按天汇总」——真实记录攒一个月太慢，一次写入 30 天样例。
             // release 包里这段代码不会出现。
             if (com.nox.sleep.BuildConfig.DEBUG) {
                 GroupLabel("开发者（仅调试包）")
@@ -216,6 +229,18 @@ fun SettingsScreen(
                     value = "立即发一条提醒通知",
                     showChevron = true,
                     onClick = { com.nox.sleep.reminder.BedtimeReminder.notifyNow(ctx) }
+                )
+                SettingRow(
+                    "生成示例数据",
+                    value = "最近 30 天 · 含午睡与多段夜",
+                    showChevron = true,
+                    onClick = onSeedData
+                )
+                SettingRow(
+                    "清除示例数据",
+                    value = "只删示例，不动真实记录",
+                    showChevron = true,
+                    onClick = onClearSamples
                 )
             }
 
@@ -317,6 +342,58 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showBedtimeDialog = false }) {
                     Text("取消", color = NoxColor.Ink3)
+                }
+            }
+        )
+    }
+
+    if (showSplashDialog) {
+        AlertDialog(
+            onDismissRequest = { showSplashDialog = false },
+            containerColor = NoxColor.Midnight,
+            title = { Text("启动动画样式", color = NoxColor.Ink, fontSize = 16.sp) },
+            text = {
+                Column {
+                    MutedText("点击任一风格，立即全屏预览一次。", size = 10.5.sp)
+                    Spacer(Modifier.height(10.dp))
+                    SplashStyle.entries.forEachIndexed { i, st ->
+                        val on = settings.splashStyle == st.key
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(
+                                    if (on) NoxColor.Violet.copy(alpha = 0.14f) else Color.Transparent
+                                )
+                                .clickable {
+                                    onUpdate { it.copy(splashStyle = st.key) }
+                                    showSplashDialog = false
+                                    onPreviewSplash(st)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    st.label,
+                                    fontSize = 14.sp,
+                                    color = NoxColor.Ink,
+                                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(st.desc, fontSize = 11.sp, color = NoxColor.Ink3)
+                            }
+                            if (on) {
+                                Text("使用中", fontSize = 10.5.sp, color = NoxColor.Cyan)
+                            }
+                        }
+                        if (i != SplashStyle.entries.lastIndex) Spacer(Modifier.height(4.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSplashDialog = false }) {
+                    Text("完成", color = NoxColor.Cyan)
                 }
             }
         )
